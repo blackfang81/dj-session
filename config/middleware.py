@@ -1,10 +1,8 @@
-from urllib.parse import urlsplit
 from django.contrib import auth
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import SimpleLazyObject
-from django.contrib.auth.models import AnonymousUser
-from django.utils import timezone
-from session.models import Session
+
+from session.session import SessionStore
 
 
 def get_user(request):
@@ -17,21 +15,22 @@ class AuthenticationMiddleware(MiddlewareMixin):
     def process_request(self, request):
         request.user = SimpleLazyObject(lambda: get_user(request))
 
+
 class YourSessionMiddleWare(MiddlewareMixin):
-
     def process_request(self, request):
-        request.user = AnonymousUser()
-
         session_key = request.COOKIES.get("sessionid")
+        request.session = SessionStore(session_key=session_key)
 
-        if not session_key:
-            return
-
-        try:
-            session = Session.objects.get(session_key=session_key)
-
-            if session.expires_at > timezone.now():
-                request.user = session.user
-
-        except Session.DoesNotExist:
-            pass
+    def process_response(self, request, response):
+        if hasattr(request, "session"):
+            if request.session.modified:
+                request.session.save()
+            if request.session.session_key:
+                response.set_cookie(
+                    "sessionid",
+                    request.session.session_key,
+                    max_age=60 * 60 * 24 * 14,
+                    httponly=True,
+                    samesite="Lax",
+                )
+        return response
