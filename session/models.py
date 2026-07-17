@@ -1,14 +1,23 @@
-from django.db import models
-from django.contrib.auth import get_user_model
+import secrets
 
-User = get_user_model()
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
 
 
 class Session(models.Model):
-    session_key = models.CharField(max_length=64, unique=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
+    session_key = models.CharField(max_length=40, unique=True)
+    session_data = models.TextField(default="{}")
+    expire_date = models.DateTimeField()
 
-    def __str__(self):
-        return f"{self.user.username} - {self.session_key}"
+    @classmethod
+    def create(cls):
+        session_key = secrets.token_hex(20)
+        expire_date = timezone.now() + timedelta(days=14)
+        return cls.objects.create(
+            session_key=session_key,
+            expire_date=expire_date,
+        )
+
+    def is_expired(self):
+        return timezone.now() >= self.expire_date
